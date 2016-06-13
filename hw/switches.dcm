@@ -1,0 +1,12 @@
+EESchema-DOCLIB  Version 2.0
+#
+$CMP R10307RN02Q
+D 3 pos rotary switch
+K Rotary, Switch
+$ENDCMP
+#
+$CMP pulse_encoder_sw
+D 2 channel pulse encoder with pushbutton
+$ENDCMP
+#
+#End Doc Library
