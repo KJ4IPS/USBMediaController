@@ -1,0 +1,1 @@
+This firmware will use a scratch-built implementation of USB, as a base for a more ambitious project
