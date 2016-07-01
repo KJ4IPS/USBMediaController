@@ -15,8 +15,11 @@
 #define USB_DEVSTATE__DETACHED 		0
 #define USB_DEVSTATE__POWERED		1
 #define USB_DEVSTATE__DEFAULT		2
-#define USB_DEVSTATE__ADDRESS		3
-#define USB_DEVSTATE__CONFIGURED	4
+//Preaddressing state, address has been sent, but we still need to finish the setup before
+//assigning the new address to the peripheral. NOT AN OFFICIAL USB VISIBLE STATE!
+#define USB_DEVSTATE__PREADDR		3
+#define USB_DEVSTATE__ADDRESS		4
+#define USB_DEVSTATE__CONFIGURED	5
 
 
 // Request Ids
@@ -31,6 +34,13 @@
 #define USB_REQUEST__GET_INTERFACE	0x0A
 #define USB_REQUEST__SET_INTERFACE	0x0B
 #define USB_REQUEST__SYNCH_FRAME	0x0C
+
+
+// bmRequestType.type
+#define USB_REQUEST_TARGET__DEV		0x00
+#define USB_REQUEST_TARGET__IF		0x01
+#define USB_REQUEST_TARGET__EP		0x02
+#define USB_REQUEST_TARGET__OTHER	0x03
 
 
 // Descriptor Types

@@ -9,11 +9,20 @@
 #include <msp430.h>
 
 #include "usb_const.h"
+#include "usb_types.h"
 
 	uint8_t UsbState = USB_DEVSTATE__DETACHED;
+	uint8_t UsbNewAddress; //00 is reserverd to mean no address to set)
+	uint8_t UsbActiveConfiguration = 0; //Zero is Unconfigured
 
 #define m_unlockUSB() USBKEYPID = 0x9628
 #define m_lockUSB() USBKEYPID = 0x0000
+
+	void usb_suspend(void);
+	void usb_resume(void);
+	void usb_reset(void);
+	void usb_handleInterupt(uint16_t source);
+	void usb_onSetupPacket(void);
 
 	/**
 	 * USB Hardware Init: Setup USB peripheral
@@ -43,6 +52,8 @@
 		//enable the usb module
 		USBCNF |= USB_EN;
 
+		// ??? Maybe set PUR here?
+
 		//Relock USB Configs
 		m_lockUSB();
 
@@ -62,13 +73,15 @@
 
 	/**
 	 * Do USB Tasks: handle usb events from peripheral
+	 * this should probably be called frequently. at minimum every 5ms (for suspend purposes)
 	 */
 	void usb_doTasks(void){
-		// Check for a setup packet, We can't use USBIV for this, as it will clean the NACs and possiblt overwrite the buffer.
+		// Check for a setup packet, We can't use USBIV for this, as it will clean the NACs and possibly overwrite the buffer.
 		if(USBIFG & SETUPIFG)
 			usb_onSetupPacket();
 
-		if(uint8_t usbStatus = USBIV)
+		uint16_t usbStatus;
+		if((usbStatus = USBIV))
 			usb_handleInterupt(USBIV);
 
 	}
@@ -77,13 +90,33 @@
 	 * Handle USB interutps:
 	 * Called when a USB event is generated
 	 */
-	usb_handleInterupt(uint8_t source){
-
+	void usb_handleInterupt(uint16_t source){
+		switch(source){
+		case 0x0002: //USB Power Drop (overload condition)
+		case 0x0004: //PLL Lock Error
+		case 0x0006: //PLL Signal Error
+		case 0x0008: //PLL Range Error
+		case 0x000A: //VBus ON
+		case 0x000C: //VBus OFF
+		case 0x0010: //Timestamp Event
+		case 0x0012: //Endpoint 0 IN
+		case 0x0014: //Endpoint 0 OUT
+		case 0x0016: //USB Reset
+		case 0x0018: //USB Suspend
+		case 0x001A: //USB Resume
+		case 0x0020: //Suspend Packet Recieved
+		case 0x0022: //Setup Packet Overwrite
+			break; //NYI
+		default:
+			break; //Unhandled
+		}
 	}
 
 	/**
 	 * Enter USB Suspend: called when the host enters suspends this device.
 	 * We need to drop current consumption after this time to .5 mA or less
+	 * Note that the suspend flag is set 3-4ms after the request, so we
+	 * have a minimum of 6 ms to respond
 	 */
 	void usb_suspend(void){
 		// In order to get current consumption down to acceptable levels, the PLL must stop.
@@ -110,6 +143,95 @@
 	 * called whenever a usb setup packet has been recieved
 	 */
 	void usb_onSetupPacket(void){
+		//Don't handle setup packets when not in an active state
+		usbSetupPacket_t setupPacket;
+		if(UsbState <= USB_DEVSTATE__POWERED)
+			return;
+		setupPacket = * (usbSetupPacket_t *) &USBSUBLK;
+		switch(setupPacket.bRequest){
+		case USB_REQUEST__GET_STATUS:
+			//TODO: Assert no data
+			//TODO assert device to host direction
+			switch(setupPacket.bmRequestType.receipient){
+			case USB_REQUEST_TARGET__DEV:
+				//TODO Queue 0x0001 back to host
+				//that means "Self powered, no RWU"
+				break;
+			case USB_REQUEST_TARGET__IF:
+				//TODO RequestError if no such interface
+				//TODO queue 0x0000 back to host
+				//ALL bits are reserved (write 0)
+				break;
+			case USB_REQUEST_TARGET__EP:
+				//TODO RequestError if no such endpoint
+				//TODO queue halt bit back to host
+				//all other bits reserved (write 0)
+				break;
+			}
+			break;
+		case USB_REQUEST__CLEAR_FEATURE:
+			//TODO: Assert no data
+			//Todo: Assert direction
+			switch(setupPacket.wValue){
+				case 0x00: //Endpoint Halt
+					//TODO: Assert valid endpoint, stall otherwise
+					//TODO: clear specified EP's HALT
+					break;
+				case 0x01: //Device RWU
+					//TODO: Stall, we don't support RWU
+					break;
+				case 0x02: //Device Test Mode
+					//TODO: Stall, we don't have any test mode (note: we still need to implement those
+					//		required by the spec)
+					break;
+				default:
+					//TODO: Stall, unexpected/unsupported request
+					break;
+			}
+			break;
+		case USB_REQUEST__SET_FEATURE:
+			//TODO: Assert no data
+			//TODO: Assert direction
+			switch(setupPacket.wValue){
+			case 0x00: //Endpoint Halt
+				//TODO: Assert valid endpoint, stall otherwise
+				//TODO: set specified EP's HALT
+				break;
+			case 0x01: //Device RWU
+				//TODO: Stall, we don't support RWU
+				break;
+			case 0x02: //Device Test Mode
+				//TODO: Stall, clearing test mode is prohibited by spec
+				break;
+			default:
+				//TODO: Stall, unexpected/unsupported request
+				break;
+			}
+			break;
+		case USB_REQUEST__SET_ADDRESS:
+			//TODO: assert zero request, index, and length
+			// IMPORTANT: Unlike all other USB requests, SET_ADDRESS does not take effect until after the status stage
+			UsbNewAddress = (uint8_t) setupPacket.wValue;
+			UsbState = USB_DEVSTATE__PREADDR;
+			break;
+		case USB_REQUEST__GET_DESCRIPTOR:
+			//TODO Assert RT 0x80
+			//TODO Assert valid descriptor
+			//TODO queue the first wLength bytes of the requested descriptor back.
+			break;
+		case USB_REQUEST__SET_DESCRIPTOR:
+			//We don't support the host modifying descriptors.
+			//TODO STALL
+			break;
+		case USB_REQUEST__GET_CONFIG:
+			//Queue USBActiveConfiguration back to host
+			break;
+		case USB_REQUEST__SET_CONFIG:
+		case USB_REQUEST__GET_INTERFACE:
+		case USB_REQUEST__SET_INTERFACE:
+		case USB_REQUEST__SYNCH_FRAME:
+			break; //NYI
+		}
 
 	}
 
