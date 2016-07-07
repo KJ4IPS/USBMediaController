@@ -28,4 +28,6 @@ struct usbSetupPacket {
 
 typedef struct usbSetupPacket usbSetupPacket_t;
 
+struct usbEndpointFlags
+
 #endif /* USB_USB_TYPES_H_ */

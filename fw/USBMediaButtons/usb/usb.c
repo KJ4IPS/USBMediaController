@@ -227,9 +227,21 @@
 			//Queue USBActiveConfiguration back to host
 			break;
 		case USB_REQUEST__SET_CONFIG:
+			//TODO assert state is not default, powrered, or attached
+			//TODO assert no data
+			//TODO assert a valid configuration
+			USBActiveConfiguration = setupPacket.wValue;
+			break;
 		case USB_REQUEST__GET_INTERFACE:
+			//TODO assert state is configured
+			//TODO assert value is zero, length is one
+			//TODO queue (wIndex)tn interface settings
+			break;
 		case USB_REQUEST__SET_INTERFACE:
+			//TODO stall, we don't support alternate interface
+			break;
 		case USB_REQUEST__SYNCH_FRAME:
+			//TODO stall, we don't support Iso transfers
 			break; //NYI
 		}
 
